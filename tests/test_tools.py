@@ -73,3 +73,12 @@ def test_user_decline_does_not_kill(server):
     session.record(tools.get_process_details(proc.pid))
     ok, _ = gate({"pid": proc.pid}, session, confirm=lambda m: False)
     assert ok is False and proc.poll() is None
+
+
+def test_confirm_prompt_keeps_both_ends_of_long_commands():
+    from port_sentinel.safety import _shorten
+    assert _shorten("python -m http.server") == "python -m http.server"
+    long_cmd = "/opt/hostedtoolcache/Python/3.12.7/x64/" * 3 + "bin/python -m http.server 8080"
+    short = _shorten(long_cmd)
+    assert len(short) <= 100
+    assert short.startswith("/opt/hostedtoolcache") and short.endswith("http.server 8080")

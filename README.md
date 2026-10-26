@@ -1,5 +1,7 @@
 # Port Sentinel Agent (#16) — Agentic Shell
 
+[![ci](https://github.com/Capsturrrr/port-sentinel/actions/workflows/ci.yml/badge.svg)](https://github.com/Capsturrrr/port-sentinel/actions/workflows/ci.yml)
+
 Natural-language agent that finds which process is using a port and frees it.
 
 > "What process is hogging port 8080? Stop it."
@@ -49,7 +51,7 @@ Other providers: `LLM_PROVIDER=groq GROQ_API_KEY=...` or `LLM_PROVIDER=ollama`.
 ## Tests and evaluation
 
 ```bash
-python3 -m pytest -q                  # 33 tests, real processes on real ports, no API key
+python3 -m pytest -q                  # 35 tests, real processes on real ports, no API key
 python3 eval/run_eval.py --runs 3     # 12 live-LLM scenarios -> eval/results.json
 python3 eval/run_eval.py --check-setup
 ```

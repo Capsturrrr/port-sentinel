@@ -25,6 +25,15 @@ FORCE_WORDS = re.compile(r"\bforce\w*|kill\s+-9|\bsigkill\b|\bhard[- ]kill", re.
 ConfirmFn = Callable[[str], bool]
 
 
+def _shorten(cmd: str, limit: int = 100) -> str:
+    """Trim a long command line from the middle, so both the program and its
+    arguments (often what identifies the process) stay visible to the user."""
+    if len(cmd) <= limit:
+        return cmd
+    keep = (limit - 3) // 2
+    return f"{cmd[:keep]} … {cmd[-keep:]}"
+
+
 def terminal_confirm(message: str) -> bool:
     try:
         return input(f"{message}\nProceed? [y/N] ").strip().lower() in ("y", "yes")
@@ -87,7 +96,7 @@ def describe_action(args: dict, session: Session) -> str:
         return f"Send {sig} to PID {pid} ({d['error']})"
     verb = "FORCE-KILL" if sig == "SIGKILL" else "Stop"
     lines = [f"⚠  {verb} PID {pid} '{d['name']}' (user {d['user']}, running {d['running_for_seconds']}s)",
-             f"   command: {d['cmdline'][:100]}", f"   signal:  {sig}"]
+             f"   command: {_shorten(d['cmdline'])}", f"   signal:  {sig}"]
     workers = session.workers_of.get(pid)
     if workers:
         lines.append(f"   workers: {len(workers)} child process(es) {workers[:6]} will stop with it")
