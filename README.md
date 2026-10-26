@@ -62,3 +62,7 @@ python3 eval/run_eval.py --check-setup
 from port_sentinel import handle, AGENT_NAME, AGENT_DESCRIPTION
 answer = handle(user_text, confirm=shell_confirm_fn)
 ```
+
+## Licence
+
+MIT. See [LICENSE](LICENSE).
