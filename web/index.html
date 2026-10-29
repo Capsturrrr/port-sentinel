@@ -72,6 +72,28 @@ th { color: var(--muted); font-weight: 600; font-size: 12px; text-transform: upp
   <div id="result"></div>
 
   <p class="note">The page only sends SIGTERM, which asks a process to exit cleanly. To force a stop, use the terminal version and type the force option yourself.</p>
+
+  <section class="card" aria-labelledby="repo-guide">
+    <h2 id="repo-guide">About this repository</h2>
+    <p class="note">The code is on GitHub at <code>Capsturrrr/port-sentinel</code>. It is licensed under MIT. Each file has one job:</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>File</th><th>What it does</th></tr></thead>
+        <tbody>
+          <tr><td><code>main.py</code></td><td>Command-line entry point. Natural-language mode, and <code>--direct</code> mode that runs one tool with no LLM.</td></tr>
+          <tr><td><code>port_sentinel/tools.py</code></td><td>The operating-system layer. Parses <code>/proc/net</code>, maps sockets to PIDs, groups workers, reads cgroups, sends signals through a pidfd, and runs the bind probe.</td></tr>
+          <tr><td><code>port_sentinel/safety.py</code></td><td>The safety gate. Tracks PIDs seen in this session, applies the SIGKILL rule and the hard rules, asks for confirmation, and writes the audit log.</td></tr>
+          <tr><td><code>port_sentinel/agent.py</code></td><td>The LLM loop. Sends tool schemas to an OpenAI-compatible provider, runs tool calls through the gate, refuses repeated calls, caps steps, and retries on rate limits.</td></tr>
+          <tr><td><code>web/server.py</code></td><td>This local web app. Standard library only, bound to 127.0.0.1, with a per-run token on every POST.</td></tr>
+          <tr><td><code>web/index.html</code></td><td>The page you are reading. One file with no external scripts.</td></tr>
+          <tr><td><code>tests/</code></td><td>42 pytest tests on real processes and sockets, plus a scripted fake LLM for the agent tests. No API key needed.</td></tr>
+          <tr><td><code>eval/run_eval.py</code></td><td>Twelve live-LLM scenarios that report pass or fail to <code>eval/results.json</code>.</td></tr>
+          <tr><td><code>.github/workflows/ci.yml</code></td><td>Continuous integration. Runs the test suite on Python 3.10 and 3.12 for each push.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="note">To run the tests: <code>python3 -m pytest -q</code>. To run the web app: <code>python3 web/server.py</code>, then open the local address shown in the terminal.</p>
+  </section>
 </main>
 
 <script>

@@ -62,7 +62,7 @@ page; use the terminal for that.
 ## Tests and evaluation
 
 ```bash
-python3 -m pytest -q                  # 35 tests, real processes on real ports, no API key
+python3 -m pytest -q                  # 42 tests, real processes on real ports, no API key
 python3 eval/run_eval.py --runs 3     # 12 live-LLM scenarios -> eval/results.json
 python3 eval/run_eval.py --check-setup
 ```
