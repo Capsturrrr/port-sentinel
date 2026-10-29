@@ -64,6 +64,7 @@ th { color: var(--muted); font-weight: 600; font-size: 12px; text-transform: upp
     <label for="port">Port</label>
     <input id="port" type="number" min="1" max="65535" value="8080">
     <button id="find" type="button">Find process</button>
+    <button id="list" type="button" class="secondary">List listeners on this port</button>
     <button id="all" type="button" class="secondary">List all listening ports</button>
     <button id="free" type="button" class="secondary">Is it free?</button>
   </div>
@@ -217,14 +218,19 @@ async function stopPid(pid, btn) {
   }
 }
 
-async function listAll() {
-  setStatus("Listing ports…");
+async function listAll(onlyPort) {
+  setStatus(onlyPort ? "Listing port " + onlyPort + "…" : "Listing all ports…");
   clearResult();
   try {
     const data = await api("/api/ports");
     setStatus("");
-    const listening = data.listening || [];
-    if (!listening.length) { result.appendChild(el("div", { class: "card" }, "No listening ports found.")); return; }
+    const listening = (data.listening || []).filter((s) => onlyPort === undefined || onlyPort === null || s.port === onlyPort);
+    if (!listening.length) {
+      const msg = onlyPort ? "Nothing is listening on port " + onlyPort + "." : "No listening ports found.";
+      result.appendChild(el("div", { class: "card" }, msg));
+      return;
+    }
+    if (onlyPort) result.appendChild(el("p", { class: "note" }, "Showing only port " + onlyPort + " (from the port box)."));
     const wrap = el("div", { class: "table-wrap card" });
     const table = el("table");
     const head = el("tr");
@@ -280,7 +286,8 @@ function currentPort() {
 
 $("find").addEventListener("click", () => { const p = currentPort(); if (p) findPort(p); });
 $("free").addEventListener("click", () => { const p = currentPort(); if (p) checkFree(p); });
-$("all").addEventListener("click", listAll);
+$("all").addEventListener("click", () => listAll(null));
+$("list").addEventListener("click", () => { const p = currentPort(); if (p) listAll(p); });
 $("port").addEventListener("keydown", (e) => { if (e.key === "Enter") { const p = currentPort(); if (p) findPort(p); } });
 </script>
 </body>
