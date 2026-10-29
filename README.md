@@ -48,6 +48,17 @@ python3 main.py --direct port 8080   # tools only, no LLM
 
 Other providers: `LLM_PROVIDER=groq GROQ_API_KEY=...` or `LLM_PROVIDER=ollama`.
 
+## Local web app
+
+```bash
+python3 web/server.py          # then open http://127.0.0.1:8000 in your browser
+```
+
+The page lists ports, finds the process on a port, checks whether a port is free, and stops a
+process with SIGTERM after a confirmation that shows the exact target. It runs only on this
+computer (bound to 127.0.0.1), and it does not run arbitrary code. SIGKILL is not offered in the
+page; use the terminal for that.
+
 ## Tests and evaluation
 
 ```bash

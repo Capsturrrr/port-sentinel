@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Port Sentinel</title>
+<style>
+:root {
+  --bg: #F5F3EE; --surface: #FFFFFF; --fg: #1C2127; --muted: #5B6470; --line: #DCD8CE;
+  --accent: #0F6B5E; --accent-soft: #DDEFEA; --warn: #A8461C; --warn-soft: #F7E3D8; --code-bg: #EFEDE6;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #14181C; --surface: #1C2229; --fg: #E8E6E1; --muted: #A2AAB4; --line: #2E3640;
+    --accent: #5FC2AF; --accent-soft: #1D3A35; --warn: #F0A07A; --warn-soft: #3A2620; --code-bg: #111519;
+    color-scheme: dark;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--fg);
+  font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 24px 48px;
+}
+main { max-width: 860px; margin: 0 auto; }
+h1 { margin: 0 0 4px; font-size: 1.6rem; }
+.sub { color: var(--muted); margin: 0 0 20px; }
+.bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px; }
+input[type="number"] { width: 120px; padding: 9px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); font: inherit; }
+button {
+  font: 500 14px system-ui, sans-serif; padding: 9px 12px; border-radius: 8px; cursor: pointer;
+  border: 1px solid var(--accent); background: var(--accent); color: var(--bg);
+}
+button.secondary { background: var(--surface); color: var(--fg); border-color: var(--line); }
+button.danger { background: var(--warn); border-color: var(--warn); }
+button:disabled { opacity: 0.5; cursor: not-allowed; }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+#status { margin: 12px 0; min-height: 1.4em; color: var(--muted); }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px; margin: 12px 0; min-width: 0; }
+.card h2 { font-size: 1rem; margin: 0 0 8px; }
+.kv { display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; font-size: 14px; }
+.kv div { min-width: 0; overflow-wrap: anywhere; }
+.kv .k { color: var(--muted); }
+pre { background: var(--code-bg); padding: 12px; border-radius: 8px; overflow-x: auto; font-size: 13px; margin: 8px 0 0; }
+.row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.note { color: var(--muted); font-size: 13px; margin-top: 16px; }
+.ok { color: var(--accent); font-weight: 600; }
+.no { color: var(--warn); font-weight: 600; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+.table-wrap { overflow-x: auto; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Port Sentinel</h1>
+  <p class="sub">Find the process holding a port, check it, and stop it. Runs only on this computer. Every stop asks you first.</p>
+
+  <div class="bar" role="group" aria-label="Find a port">
+    <label for="port">Port</label>
+    <input id="port" type="number" min="1" max="65535" value="8080">
+    <button id="find" type="button">Find process</button>
+    <button id="all" type="button" class="secondary">List all listening ports</button>
+    <button id="free" type="button" class="secondary">Is it free?</button>
+  </div>
+
+  <div id="status" role="status" aria-live="polite"></div>
+  <div id="result"></div>
+
+  <p class="note">The page only sends SIGTERM, which asks a process to exit cleanly. To force a stop, use the terminal version and type the force option yourself.</p>
+</main>
+
+<script>
+const TOKEN = "__TOKEN__";
+const $ = (id) => document.getElementById(id);
+const result = $("result");
+const status = $("status");
+
+function setStatus(text, cls) {
+  status.textContent = text;
+  status.className = cls || "";
+}
+
+function el(tag, attrs, text) {
+  const n = document.createElement(tag);
+  if (attrs) for (const k in attrs) n.setAttribute(k, attrs[k]);
+  if (text !== undefined) n.textContent = text;
+  return n;
+}
+
+function clearResult() { result.textContent = ""; }
+
+async function api(path, opts) {
+  const res = await fetch(path, opts);
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || ("HTTP " + res.status));
+  return data;
+}
+
+function kv(pairs) {
+  const box = el("div", { class: "kv" });
+  for (const [k, v] of pairs) {
+    box.appendChild(el("div", { class: "k" }, k));
+    box.appendChild(el("div", null, String(v)));
+  }
+  return box;
+}
+
+function renderService(svc, port) {
+  const card = el("div", { class: "card" });
+  const t = svc.target || {};
+  card.appendChild(el("h2", null, "Port " + port + " — " + (t.name || "unknown process")));
+  const pairs = [
+    ["Listening on", (svc.listening_on || []).join(", ") || "—"],
+    ["Stop target (PID)", svc.target_pid ?? "none found"],
+    ["Command", t.cmdline || "—"],
+    ["User", t.user || "—"],
+    ["Workers", (svc.workers || []).length ? svc.workers.join(", ") : "none"],
+  ];
+  if (svc.managed_by) pairs.push(["Managed by", svc.managed_by.advice]);
+  if (svc.note) pairs.push(["Note", svc.note]);
+  card.appendChild(kv(pairs));
+
+  if (svc.target_pid && !svc.managed_by) {
+    const row = el("div", { class: "row" });
+    const btn = el("button", { type: "button", class: "danger" }, "Stop PID " + svc.target_pid + " (SIGTERM)");
+    btn.addEventListener("click", () => stopPid(svc.target_pid, btn));
+    row.appendChild(btn);
+    card.appendChild(row);
+  } else if (svc.managed_by) {
+    card.appendChild(el("p", { class: "note" }, "This service is managed by " + svc.managed_by.kind + ". Stop it with the command above, so it is not restarted."));
+  }
+  return card;
+}
+
+async function findPort(port) {
+  setStatus("Looking up port " + port + "…");
+  clearResult();
+  try {
+    const data = await api("/api/port/" + port);
+    setStatus("");
+    if (!data.in_use) {
+      result.appendChild(el("div", { class: "card" }, "Nothing is listening on port " + port + "."));
+      return;
+    }
+    for (const svc of data.services || []) result.appendChild(renderService(svc, port));
+    if (data.connections && Object.keys(data.connections).length) {
+      result.appendChild(el("p", { class: "note" }, "Connections on this port: " + JSON.stringify(data.connections)));
+    }
+  } catch (e) {
+    setStatus(e.message, "no");
+  }
+}
+
+async function stopPid(pid, btn) {
+  btn.disabled = true;
+  setStatus("Checking the stop…");
+  try {
+    const pre = await api("/api/stop/preview", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Token": TOKEN },
+      body: JSON.stringify({ pid }),
+    });
+    if (!pre.allowed) {
+      setStatus(pre.reason, "no");
+      btn.disabled = false;
+      return;
+    }
+    // The exact target is shown in the browser's confirm box before anything is sent.
+    if (!window.confirm(pre.preview + "\n\nStop this process?")) {
+      setStatus("Cancelled. Nothing was stopped.");
+      btn.disabled = false;
+      return;
+    }
+    const out = await api("/api/stop", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Token": TOKEN },
+      body: JSON.stringify({ pid, confirmed: true }),
+    });
+    if (out.ok) {
+      const freed = (out.auto_verify || []).map((v) => "port " + v.port + (v.free ? " is free" : " is still in use")).join("; ");
+      setStatus("Stopped PID " + pid + (freed ? ". " + freed : "") + ".", "ok");
+      clearResult();
+    } else {
+      setStatus(out.error || "The stop did not complete.", "no");
+      btn.disabled = false;
+    }
+  } catch (e) {
+    setStatus(e.message, "no");
+    btn.disabled = false;
+  }
+}
+
+async function listAll() {
+  setStatus("Listing ports…");
+  clearResult();
+  try {
+    const data = await api("/api/ports");
+    setStatus("");
+    const listening = data.listening || [];
+    if (!listening.length) { result.appendChild(el("div", { class: "card" }, "No listening ports found.")); return; }
+    const wrap = el("div", { class: "table-wrap card" });
+    const table = el("table");
+    const head = el("tr");
+    ["Port", "Address", "PID", "Process"].forEach((h) => head.appendChild(el("th", null, h)));
+    table.appendChild(el("thead")).appendChild(head);
+    const body = el("tbody");
+    for (const s of listening) {
+      const tr = el("tr");
+      tr.appendChild(el("td", null, String(s.port)));
+      tr.appendChild(el("td", null, (s.listening_on || []).join(", ")));
+      tr.appendChild(el("td", null, s.target_pid ?? "—"));
+      tr.appendChild(el("td", null, (s.target && s.target.name) || s.note || "—"));
+      body.appendChild(tr);
+    }
+    table.appendChild(body);
+    wrap.appendChild(table);
+    result.appendChild(wrap);
+  } catch (e) {
+    setStatus(e.message, "no");
+  }
+}
+
+async function checkFree(port) {
+  setStatus("Checking port " + port + "…");
+  clearResult();
+  try {
+    const v = await api("/api/free/" + port);
+    setStatus("");
+    const verdict = v.free
+      ? el("p", { class: "ok" }, "Port " + port + " is free. A new server can bind to it.")
+      : el("p", { class: "no" }, "Port " + port + " is still in use.");
+    const card = el("div", { class: "card" });
+    card.appendChild(verdict);
+    card.appendChild(kv([
+      ["TIME_WAIT connections", v.time_wait_connections ?? 0],
+      ["Bind test without SO_REUSEADDR", v.bind_without_reuseaddr || "—"],
+    ]));
+    if (v.note) card.appendChild(el("p", { class: "note" }, v.note));
+    result.appendChild(card);
+  } catch (e) {
+    setStatus(e.message, "no");
+  }
+}
+
+function currentPort() {
+  const n = Number($("port").value);
+  if (!Number.isInteger(n) || n < 1 || n > 65535) {
+    setStatus("Enter a port between 1 and 65535.", "no");
+    return null;
+  }
+  return n;
+}
+
+$("find").addEventListener("click", () => { const p = currentPort(); if (p) findPort(p); });
+$("free").addEventListener("click", () => { const p = currentPort(); if (p) checkFree(p); });
+$("all").addEventListener("click", listAll);
+$("port").addEventListener("keydown", (e) => { if (e.key === "Enter") { const p = currentPort(); if (p) findPort(p); } });
+</script>
+</body>
+</html>
